@@ -15,7 +15,7 @@ app = FastAPI(title="Portfolio Monte Carlo Simulator")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=False,
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -26,6 +26,12 @@ class SimulationRequest(BaseModel):
     initial_investment: float = Field(gt=0)
     time_horizon: int = Field(gt=0)
     num_simulations: int = Field(gt=0)
+
+
+@app.get("/health")
+@app.get("/api/health")
+def health_check():
+    return {"status": "online", "message": "FastAPI Monte Carlo Engine Connected"}
 
 
 @app.post("/api/simulate")
