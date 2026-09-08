@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Portfolio Risk Simulator | Monte Carlo Stress Testing & Value at Risk</title>
+  <meta name="description" content="Interactive multi-asset Monte Carlo portfolio risk simulator connecting to FastAPI backend. Calculate Expected Final Value, 95% VaR, 95% CVaR, and visualize stochastic price paths.">
+  <link rel="icon" type="image/svg+xml" href="static/favicon.svg">
+  <link rel="stylesheet" href="css/style.css">
+  <!-- Chart.js 4.4 CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+</head>
+<body>
+  <div class="app-container">
+    <!-- Header & Navigation Bar -->
+    <header class="app-header">
+      <div class="brand-section">
+        <div class="brand-logo" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="22 7 13.5 15.5 8.5 10.5 2 17"></polyline>
+            <polyline points="16 7 22 7 22 13"></polyline>
+          </svg>
+        </div>
+        <div class="brand-titles">
+          <h1>Portfolio Risk Simulator</h1>
+          <p class="brand-subtitle">
+            Quantitative Multi-Asset Monte Carlo Engine
+            <span class="badge-tag">FastAPI Powered</span>
+          </p>
+        </div>
+      </div>
+
+      <div class="header-actions">
+        <!-- Live Backend Status Badge -->
+        <div id="backendStatus" class="status-badge" role="status" aria-live="polite">
+          <span class="status-indicator" aria-hidden="true"></span>
+          <span id="backendStatusText">Checking Backend...</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- Quick Presets Selector -->
+    <nav class="preset-bar" aria-label="Portfolio Presets">
+      <span class="preset-label">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+        </svg>
+        Presets:
+      </span>
+      <button type="button" class="preset-chip active" data-preset="nifty_it" id="presetNiftyIt">Nifty IT (TCS.NS, INFY.NS, WIPRO.NS, HCLTECH.NS)</button>
+      <button type="button" class="preset-chip" data-preset="india_bluechips" id="presetIndiaBluechips">India Bluechips (RELIANCE.NS, HDFCBANK.NS, ICICIBANK.NS, TCS.NS)</button>
+      <button type="button" class="preset-chip" data-preset="tech" id="presetTech">Tech Titans (AAPL, MSFT, GOOGL, NVDA)</button>
+      <button type="button" class="preset-chip" data-preset="balanced" id="presetBalanced">Balanced 60/40 (SPY, BND)</button>
+      <button type="button" class="preset-chip" data-preset="allweather" id="presetAllWeather">All-Weather (SPY, TLT, GLD, IEF)</button>
+      <button type="button" class="preset-chip" data-preset="growth" id="presetGrowth">High Growth (TSLA, NVDA, AMD, META)</button>
+    </nav>
+
+    <!-- Main Dashboard Grid Layout -->
+    <main class="dashboard-grid">
+      <!-- Left Column: Simulation Parameters Form -->
+      <aside class="panel-card" aria-labelledby="formHeading">
+        <div class="panel-header">
+          <h2 id="formHeading" class="panel-title">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 20v-6M6 20V10M18 20V4"></path>
+            </svg>
+            Simulation Parameters
+          </h2>
+        </div>
+
+        <div class="panel-body">
+          <form id="simulationForm" novalidate>
+            <!-- 1. Tickers Input -->
+            <div class="form-group">
+              <div class="label-row">
+                <label for="tickersInput">
+                  Portfolio Assets (Tickers)
+                </label>
+                <span class="label-hint">NSE / Global Symbols</span>
+              </div>
+              <div class="input-container">
+                <span class="input-icon">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect>
+                    <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path>
+                  </svg>
+                </span>
+                <input 
+                  type="text" 
+                  id="tickersInput" 
+                  name="tickers" 
+                  class="form-input has-icon" 
+                  value="TCS.NS, INFY.NS, WIPRO.NS, HCLTECH.NS" 
+                  placeholder="e.g. TCS.NS, INFY.NS, RELIANCE.NS, AAPL" 
+                  autocomplete="off"
+                  required
+                >
+              </div>
+              <div id="tickerChips" class="ticker-chips-container" aria-live="polite"></div>
+            </div>
+
+            <!-- 2. Initial Investment -->
+            <div class="form-group">
+              <div class="label-row">
+                <label for="initialInvestment">
+                  Initial Investment (<span id="currencySymbolLabel">₹</span>)
+                </label>
+                <div class="currency-toggle-wrap">
+                  <span class="label-hint" id="currencyHint">₹ / INR Capital</span>
+                  <div class="currency-switch" role="group" aria-label="Currency Selector">
+                    <button type="button" class="chart-btn active" data-currency="INR" id="currencyInrBtn">₹ INR</button>
+                    <button type="button" class="chart-btn" data-currency="USD" id="currencyUsdBtn">$ USD</button>
+                  </div>
+                </div>
+              </div>
+              <div class="input-container">
+                <span class="input-icon" id="currencyInputIcon">₹</span>
+                <input 
+                  type="number" 
+                  id="initialInvestment" 
+                  name="initial_investment" 
+                  class="form-input has-icon" 
+                  value="500000" 
+                  min="1000" 
+                  max="1000000000" 
+                  step="1000"
+                  required
+                >
+              </div>
+              <div class="quick-picks" id="quickInvestmentPicks">
+                <button type="button" class="btn-quick" data-amount="50000">₹50k</button>
+                <button type="button" class="btn-quick" data-amount="100000">₹1L</button>
+                <button type="button" class="btn-quick active" data-amount="500000">₹5L</button>
+                <button type="button" class="btn-quick" data-amount="1000000">₹10L</button>
+                <button type="button" class="btn-quick" data-amount="2500000">₹25L</button>
+                <button type="button" class="btn-quick" data-amount="5000000">₹50L</button>
+              </div>
+            </div>
+
+            <!-- 3. Time Horizon -->
+            <div class="form-group">
+              <div class="label-row">
+                <label for="timeHorizon">
+                  Time Horizon (Trading Days)
+                </label>
+                <span class="label-hint">252 days ≈ 1 yr</span>
+              </div>
+              <div class="input-container">
+                <span class="input-icon">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <polyline points="12 6 12 12 16 14"></polyline>
+                  </svg>
+                </span>
+                <input 
+                  type="number" 
+                  id="timeHorizon" 
+                  name="time_horizon" 
+                  class="form-input has-icon" 
+                  value="252" 
+                  min="5" 
+                  max="2520" 
+                  step="1"
+                  required
+                >
+              </div>
+              <div class="quick-picks">
+                <button type="button" class="btn-quick" data-days="30">30d (1M)</button>
+                <button type="button" class="btn-quick" data-days="90">90d (1Q)</button>
+                <button type="button" class="btn-quick active" data-days="252">252d (1Y)</button>
+                <button type="button" class="btn-quick" data-days="504">504d (2Y)</button>
+              </div>
+            </div>
+
+            <!-- 4. Number of Simulations -->
+            <div class="form-group">
+              <div class="label-row">
+                <label for="numSimulations">
+                  Simulations Count
+                </label>
+                <span class="label-hint">Monte Carlo Paths</span>
+              </div>
+              <div class="input-container">
+                <span class="input-icon">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21.21 15.89A10 10 0 1 1 8 2.83"></path>
+                    <path d="M22 12A10 10 0 0 0 12 2v10z"></path>
+                  </svg>
+                </span>
+                <input 
+                  type="number" 
+                  id="numSimulations" 
+                  name="num_simulations" 
+                  class="form-input has-icon" 
+                  value="500" 
+                  min="50" 
+                  max="5000" 
+                  step="50"
+                  required
+                >
+              </div>
+              <div class="slider-container">
+                <input 
+                  type="range" 
+                  id="simulationsSlider" 
+                  class="form-range" 
+                  min="100" 
+                  max="2500" 
+                  step="50" 
+                  value="500"
+                  aria-label="Simulation Count Slider"
+                >
+              </div>
+            </div>
+
+            <!-- Advanced Endpoint Settings Toggle -->
+            <details class="settings-details">
+              <summary class="settings-summary">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="12" cy="12" r="3"></circle>
+                  <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                </svg>
+                Backend Connection Settings
+              </summary>
+              <div class="settings-content">
+                <label for="backendUrlInput" style="font-size: 0.75rem; margin-bottom: 0.35rem; display:block;">API Endpoint Base URL</label>
+                <input 
+                  type="url" 
+                  id="backendUrlInput" 
+                  class="form-input" 
+                  value="http://localhost:8000" 
+                  placeholder="http://localhost:8000"
+                >
+              </div>
+            </details>
+
+            <!-- Submit Button -->
+            <button type="submit" id="submitBtn" class="btn-primary">
+              <span class="spinner" aria-hidden="true"></span>
+              <span class="btn-icon">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                  <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                </svg>
+              </span>
+              <span>Run Monte Carlo Simulation</span>
+            </button>
+
+            <!-- Alert / Notification Banner -->
+            <div id="alertBanner" class="alert-banner" role="alert">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;">
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="12" y1="8" x2="12" y2="12"></line>
+                <line x1="12" y1="16" x2="12.01" y2="16"></line>
+              </svg>
+              <span id="alertText">Error details</span>
+            </div>
+          </form>
+        </div>
+      </aside>
+
+      <!-- Right Column: Analytics & Visualizations -->
+      <section class="analytics-main" aria-label="Risk Analytics & Price Paths">
+        <!-- 4 Summary Metric Cards -->
+        <div class="metrics-section" aria-label="Key Risk Metrics">
+          <!-- Card 1: Expected Final Value -->
+          <article class="metric-card expected">
+            <div class="metric-header">
+              <span class="metric-title">
+                Expected Final Value
+                <span class="info-tooltip" title="Mean terminal portfolio value across all simulated trajectories">?</span>
+              </span>
+              <div class="metric-icon-wrap" aria-hidden="true">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <line x1="12" y1="1" x2="12" y2="23"></line>
+                  <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
+                </svg>
+              </div>
+            </div>
+            <div id="metricExpectedValue" class="metric-value">$0.00</div>
+            <div class="metric-footer">
+              <span class="metric-sub">Mean Portfolio Value</span>
+              <span id="metricExpectedReturn" class="metric-badge neutral">+0.00%</span>
+            </div>
+          </article>
+
+          <!-- Card 2: 95% VaR -->
+          <article class="metric-card var">
+            <div class="metric-header">
+              <span class="metric-title">
+                95% Value at Risk (VaR)
+                <span class="info-tooltip" title="Maximum expected capital loss at a 95% confidence level over the investment horizon">?</span>
+              </span>
+              <div class="metric-icon-wrap" aria-hidden="true">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+                  <line x1="12" y1="9" x2="12" y2="13"></line>
+                  <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                </svg>
+              </div>
+            </div>
+            <div id="metricVarValue" class="metric-value">$0.00</div>
+            <div class="metric-footer">
+              <span class="metric-sub">Max loss @ 95% Conf.</span>
+              <span id="metricVarPercent" class="metric-badge warning">0.0% of capital</span>
+            </div>
+          </article>
+
+          <!-- Card 3: 95% CVaR -->
+          <article class="metric-card cvar">
+            <div class="metric-header">
+              <span class="metric-title">
+                95% CVaR (Expected Shortfall)
+                <span class="info-tooltip" title="Expected portfolio loss conditional on losses exceeding the 95% VaR threshold (worst 5% tail scenarios)">?</span>
+              </span>
+              <div class="metric-icon-wrap" aria-hidden="true">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86 7.86 2"></polygon>
+                  <line x1="12" y1="8" x2="12" y2="12"></line>
+                  <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                </svg>
+              </div>
+            </div>
+            <div id="metricCvarValue" class="metric-value">$0.00</div>
+            <div class="metric-footer">
+              <span class="metric-sub">Tail Risk in Worst 5%</span>
+              <span id="metricCvarPercent" class="metric-badge negative">0.0% of capital</span>
+            </div>
+          </article>
+
+          <!-- Card 4: Probability of Loss -->
+          <article class="metric-card loss">
+            <div class="metric-header">
+              <span class="metric-title">
+                Probability of Loss
+                <span class="info-tooltip" title="Percentage of simulated paths ending with terminal value strictly below the initial capital investment">?</span>
+              </span>
+              <div class="metric-icon-wrap" aria-hidden="true">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M22 12h-4l-3 9L9 3l-3 9H2"></path>
+                </svg>
+              </div>
+            </div>
+            <div id="metricProbLossValue" class="metric-value">0.0%</div>
+            <div class="metric-footer">
+              <span class="metric-sub">Sims Ending Below Capital</span>
+              <span id="metricProbLossBadge" class="metric-badge neutral">Calculating</span>
+            </div>
+          </article>
+        </div>
+
+        <!-- Interactive Line Chart Card -->
+        <article class="panel-card chart-card" aria-label="Simulated Price Paths Chart">
+          <div class="panel-header">
+            <h2 class="panel-title">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M3 3v18h18"></path>
+                <path d="M18 9l-5 5-4-4-3 3"></path>
+              </svg>
+              Simulated Portfolio Trajectories
+            </h2>
+
+            <div class="chart-header-actions">
+              <!-- View Mode Toggle -->
+              <div class="chart-btn-group" role="group" aria-label="Trajectory Mode">
+                <button type="button" class="chart-btn active" data-mode="hybrid" id="modeHybrid">Quantiles + Cloud</button>
+                <button type="button" class="chart-btn" data-mode="quantiles" id="modeQuantiles">Bands Only</button>
+                <button type="button" class="chart-btn" data-mode="all" id="modeAll">All Paths</button>
+              </div>
+
+              <!-- Scale Toggle -->
+              <div class="chart-btn-group" role="group" aria-label="Chart Scale">
+                <button type="button" class="chart-btn active" data-scale="linear" id="scaleLinear">Linear</button>
+                <button type="button" class="chart-btn" data-scale="logarithmic" id="scaleLog">Log</button>
+              </div>
+
+              <!-- Export Tools -->
+              <div class="chart-btn-group" role="group" aria-label="Export Options">
+                <button type="button" class="chart-btn" id="exportCsvBtn" title="Export Simulation Paths as CSV">CSV</button>
+                <button type="button" class="chart-btn" id="exportImgBtn" title="Download Chart PNG">PNG</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="panel-body">
+            <div class="chart-canvas-wrapper">
+              <canvas id="simulationChart" aria-label="Monte Carlo Price Paths Line Chart" role="img"></canvas>
+              
+              <!-- Loading Overlay -->
+              <div id="chartLoader" class="chart-loader-overlay">
+                <div class="loader-orbit" aria-hidden="true"></div>
+                <div class="loader-text">Simulating Correlated Geometric Brownian Motion...</div>
+                <div class="loader-subtext">Fetching historical data &amp; solving covariance Cholesky matrix</div>
+              </div>
+            </div>
+          </div>
+        </article>
+
+        <!-- Secondary Analytics Sub-grid: Terminal Distribution & Quantiles -->
+        <div class="analytics-subgrid">
+          <!-- Terminal Value Distribution Histogram -->
+          <article class="panel-card" aria-label="Terminal Value Distribution">
+            <div class="panel-header">
+              <h3 class="panel-title" style="font-size: 0.95rem;">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <line x1="18" y1="20" x2="18" y2="10"></line>
+                  <line x1="12" y1="20" x2="12" y2="4"></line>
+                  <line x1="6" y1="20" x2="6" y2="14"></line>
+                </svg>
+                Terminal Outcome Distribution
+              </h3>
+            </div>
+            <div class="panel-body">
+              <div class="dist-canvas-wrapper">
+                <canvas id="distributionChart" aria-label="Terminal Value Outcome Distribution" role="img"></canvas>
+              </div>
+            </div>
+          </article>
+
+          <!-- Statistical Breakdown Table -->
+          <article class="panel-card" aria-label="Simulation Quantile Summary Table">
+            <div class="panel-header">
+              <h3 class="panel-title" style="font-size: 0.95rem;">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                  <polyline points="14 2 14 8 20 8"></polyline>
+                  <line x1="16" y1="13" x2="8" y2="13"></line>
+                  <line x1="16" y1="17" x2="8" y2="17"></line>
+                </svg>
+                Quantile Summary Breakdown
+              </h3>
+            </div>
+            <div class="panel-body" style="padding: 0.8rem 1.2rem;">
+              <table class="table-dense">
+                <thead>
+                  <tr>
+                    <th>Metric / Percentile</th>
+                    <th>Simulated Value</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td class="label-col">Worst Case (Min Outcome)</td>
+                    <td id="statMin" class="text-rose">$0.00</td>
+                  </tr>
+                  <tr>
+                    <td class="label-col">5th Percentile (95% VaR Threshold)</td>
+                    <td id="statP5" class="text-amber">$0.00</td>
+                  </tr>
+                  <tr>
+                    <td class="label-col">Median Outcome (50th Percentile)</td>
+                    <td id="statMedian" class="text-cyan">$0.00</td>
+                  </tr>
+                  <tr>
+                    <td class="label-col">Mean / Expected Value</td>
+                    <td id="statMean" class="text-emerald">$0.00</td>
+                  </tr>
+                  <tr>
+                    <td class="label-col">95th Percentile (Bull Case)</td>
+                    <td id="statP95" class="text-emerald">$0.00</td>
+                  </tr>
+                  <tr>
+                    <td class="label-col">Best Case (Max Outcome)</td>
+                    <td id="statMax" class="text-cyan">$0.00</td>
+                  </tr>
+                  <tr>
+                    <td class="label-col">Simulated Horizon Duration</td>
+                    <td id="statHorizon" style="color: var(--text-secondary);">252 Trading Days</td>
+                  </tr>
+                  <tr>
+                    <td class="label-col">Expected Total Return</td>
+                    <td id="statReturn" class="text-emerald">+0.00%</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </article>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- Application Controller -->
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
