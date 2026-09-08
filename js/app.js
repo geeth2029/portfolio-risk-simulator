@@ -6,13 +6,17 @@
 import { PortfolioApiClient } from './api.js';
 import { PortfolioChartManager } from './charts.js';
 
+const API_BASE_URL = window.location.origin.includes('localhost')
+  ? 'http://localhost:8000'
+  : window.location.origin;
+
 // Application State
 const state = {
   tickers: ['TCS.NS', 'INFY.NS', 'WIPRO.NS', 'HCLTECH.NS'],
   initialInvestment: 500000,
   timeHorizon: 252,
   numSimulations: 500,
-  backendUrl: 'http://localhost:8000',
+  backendUrl: API_BASE_URL,
   isLoading: false,
   lastResult: null,
   currency: 'INR'
@@ -286,7 +290,7 @@ async function checkBackendStatus() {
       safeSetText(text, 'Connected (FastAPI :8000)');
     } else {
       badge.className = 'status-badge error';
-      badge.title = 'Cannot reach FastAPI backend on http://localhost:8000';
+      badge.title = `Cannot reach FastAPI backend at ${apiClient.baseUrl}`;
       safeSetText(text, 'Backend Disconnected');
     }
   }
