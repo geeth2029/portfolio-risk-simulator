@@ -2,7 +2,10 @@
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
+import os
 import uvicorn
 
 from monte_carlo import calculate_risk_metrics, simulate_paths
@@ -43,6 +46,23 @@ def simulate(request: SimulationRequest) -> dict:
         "paths": paths.tolist(),
         "risk_metrics": metrics,
     }
+
+
+# Mount css and js directories directly if they exist in root
+if os.path.exists("css"):
+    app.mount("/css", StaticFiles(directory="css"), name="css")
+
+if os.path.exists("js"):
+    app.mount("/js", StaticFiles(directory="js"), name="js")
+
+# Mount general static assets if static folder exists
+if os.path.exists("static"):
+    app.mount("/static", StaticFiles(directory="static"), name="static")
+
+# Serve index.html at root route
+@app.get("/")
+def read_root():
+    return FileResponse("index.html")
 
 
 if __name__ == "__main__":
